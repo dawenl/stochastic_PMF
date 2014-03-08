@@ -4,8 +4,8 @@
 # <codecell>
 
 import cPickle as pickle
-import glob
 import itertools
+import json
 import operator
 import os
 
@@ -39,19 +39,19 @@ def get_all_song_hotttnesss(msd_dir, ext='.h5') :
 
 # <codecell>
 
-if os.path.exists('track_to_hotttnesss.cPickle'):
-    with open('track_to_hotttnesss.cPickle', 'rb') as f:
-        track_to_hotttnesss = pickle.load(f)
+if os.path.exists('track_to_hotttnesss.json'):
+    with open('track_to_hotttnesss.json', 'rb') as f:
+        track_to_hotttnesss = json.load(f)
 else:
     track_to_hotttnesss = get_all_song_hotttnesss(MSD_DIR)
-    with open('track_to_hotttnesss.cPickle', 'wb') as f:
-        pickle.dump(track_to_hotttnesss, f)
+    with open('track_to_hotttnesss.json', 'wb') as f:
+        json.dump(track_to_hotttnesss, f)
 
 # <codecell>
 
-# it's interesting to see what's the most popular songs
+# see some track-hotttnesss pairs
 track_to_hotttnesss_ordered = sorted(track_to_hotttnesss.iteritems(), key=operator.itemgetter(1), reverse=True)
-for i in xrange(20):
+for i in xrange(0, 50000, 1000):
     track_ID = track_to_hotttnesss_ordered[i][0]
     hotttnesss = track_to_hotttnesss_ordered[i][1]
     out = !grep "$track_ID" "$MSD_ADD"/unique_tracks.txt 
@@ -89,14 +89,15 @@ def data_generator(msd_data_root, tracks, shuffle=True, ext='.h5'):
 
 # <codecell>
 
-def build_codewords(msd_data_root, tracks, K, max_iter=3, random_state=None):
+def build_codewords(msd_data_root, tracks, K, max_iter=10, random_state=None):
     if type(random_state) is int:
         np.random.seed(random_state)
     else:
         np.random.setstate(random_state)
         
     cluster = HartiganOnline.HartiganOnline(n_clusters=K)
-    for _ in xrange(max_iter):
+    for i in xrange(max_iter):
+        print 'Iteration %d: passing through the data...' % (i+1)
         for d in data_generator(msd_data_root, tracks):
             cluster.partial_fit(d)
     return cluster
@@ -104,7 +105,18 @@ def build_codewords(msd_data_root, tracks, K, max_iter=3, random_state=None):
 # <codecell>
 
 K = 512
-cluster = build_codewords(MSD_DATA_ROOT, tracks_VQ, K, random_state=98765)
+cluster = build_codewords(MSD_DATA_ROOT, tracks_VQ, K, max_iter=3, random_state=98765)
+
+# <codecell>
+
+figure(figsize=(22, 4))
+imshow(cluster.cluster_centers_.T, cmap=cm.PuOr_r, aspect='auto', interpolation='nearest')
+colorbar()
+
+# <codecell>
+
+with open('Codebook_K%d_Hartigan' % K, 'wb') as f:
+    pickle.dump(cluster, f)
 
 # <codecell>
 
