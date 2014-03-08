@@ -65,12 +65,12 @@ pass
 
 # <codecell>
 
-# randomly select 9500 non-zero-hotttnesss tracks and 500 zeros-hotttnesss tracks
+# randomly select 47500 non-zero-hotttnesss tracks and 2500 zeros-hotttnesss tracks
 np.random.seed(98765)
 tracks_nzhotttnesss = np.random.choice(filter(lambda x: track_to_hotttnesss[x] != 0.0, track_to_hotttnesss.keys()), 
-                                       size=9500, replace=False)
+                                       size=47500, replace=False)
 tracks_zhotttnesss = np.random.choice(filter(lambda x: track_to_hotttnesss[x] == 0.0, track_to_hotttnesss.keys()), 
-                                      size=500, replace=False)
+                                      size=2500, replace=False)
 tracks_VQ = np.hstack((tracks_nzhotttnesss, tracks_zhotttnesss))
 
 # <codecell>
@@ -115,9 +115,12 @@ colorbar()
 
 # <codecell>
 
-with open('Codebook_K%d_Hartigan' % K, 'wb') as f:
-    pickle.dump(cluster, f)
+figure(figsize=(22, 4))
+imshow(cluster.cluster_centers_.T, cmap=cm.PuOr_r, aspect='auto', interpolation='nearest')
+colorbar()
 
 # <codecell>
 
+with open('Codebook_K%d_Hartigan' % K, 'wb') as f:
+    pickle.dump(cluster, f)
 
