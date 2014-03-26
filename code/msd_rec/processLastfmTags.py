@@ -149,7 +149,7 @@ def getValidTrackTags(cur, track, tid, vocab, voc_to_num):
     cur_td.execute("SELECT tag, val FROM tid_tag WHERE tid = %d AND val > 0" % tid[track])
     out = {}
     for (tag, val) in cur_td:
-        stag = sanitize(vocab[tag])
+        stag = sanitize(vocab[tag-1])
         if stag not in voc_to_num:
             continue
         if voc_to_num[stag] in out:          
@@ -162,30 +162,25 @@ def getValidTrackTags(cur, track, tid, vocab, voc_to_num):
 
 
 def numberize(infile, outfile, cur_md, cur_td, tid, vocab, voc_to_num):
-    with open(outfile, 'wb') as fw:
-        with open(infile, 'rb') as fr:
-            for line in fr:
-                aid = line.strip()
-                for track in getArtistTracks(cur_md, aid):
-                    if track not in tid:
-                        continue
-                    out = getValidTrackTags(cur_td, track, tid, vocab, voc_to_num)
-                    fw.write('%s\t%s\n' % (track, ' '.join('%d:%.1f' % pair for pair in out.items())))    
+    with open(infile, 'rb') as fr, open(outfile, 'wb') as fw:
+        for line in fr:
+            aid = line.strip()
+            for track in getArtistTracks(cur_md, aid):
+                if track not in tid:
+                    continue
+                out = getValidTrackTags(cur_td, track, tid, vocab, voc_to_num)
+                fw.write('%s\t%s\n' % (track, ' '.join('%d:%.1f' % pair for pair in out.items())))    
 
 # <codecell>
 
 # turn the whole MSD tags to numbers
-conn_md = sqlite3.connect(md_dbfile)
-conn_td = sqlite3.connect(tags_dbfile)
-
-cur_md = conn_md.cursor()
-cur_td = conn_td.cursor()
-
-numberize('artists_train.txt', 'tracks_tag_train.num', cur_md, cur_td, tid, vocab, voc_to_num)
-numberize('artists_test.txt', 'tracks_tag_test.num', cur_md, cur_td, tid, vocab, voc_to_num)
-
-conn_md.close()
-conn_td.close()
+with sqlite3.connect(md_dbfile) as conn_md, sqlite3.connect(tags_dbfile) as conn_td:
+    
+    cur_md = conn_md.cursor()
+    cur_td = conn_td.cursor()
+    
+    numberize('artists_train.txt', 'tracks_tag_train.num', cur_md, cur_td, tid, vocab, voc_to_num)
+    numberize('artists_test.txt', 'tracks_tag_test.num', cur_md, cur_td, tid, vocab, voc_to_num)
 
 # <codecell>
 
