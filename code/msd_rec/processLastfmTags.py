@@ -9,7 +9,7 @@ import re
 import sqlite3
 
 import nltk
-from nltk.stem.porter import PorterStemmer
+from nltk.stem import PorterStemmer
 
 # <codecell>
 
@@ -74,14 +74,14 @@ filtered_tags = (# favorate/like/love/blabla
                  'malloy2000 playlist - top songs - classical to metal', 'loved tracks',
                  'top artists', 'all time favorites', 'best songs of the 00s', 'favourite tracks', 'Solomusika-Loved', 
                  'all time faves', 'british i like', 'Jills Station', 'de todo mio favoritos', 'Faves', 'Fave', 
-                 'acclaimed music top 3000'
+                 'acclaimed music top 3000', 'top 2000', 'leapsandloved', 'Radiotsar approved', 
 
                  # great/awesome/blabla
                  'kick ass', 'wonderful', 'excellent', 'Great Lyricists', 'badass', 'awesomeness', 'great song', 'Awesome',
                  'cool', 'amazing', 'good', 'nice', 'sweet', 'best', 'FUCKING AWESOME', 'lovely', 'Good Stuff', 'brilliant',
                  'feel good', 'perfect', 'all the best', 'cute', 'the best', '<3', 'interesting', 'feelgood', 'pretty', 
                  'i feel good', 'good shit', 'good music', 'good song', 'great songs', 'yeah', 'best song ever', 'wow', 
-                 'worship', 'makes me happy', 'ok', 'damned good', 'underrated', 'Perfection',
+                 'worship', 'makes me happy', 'ok', 'damned good', 'underrated', 'Perfection', 'super',
                  
                  # rating
                  '1', '3', '4', '5', '4 Stars', '3 stars', '4 Star', '3 star', '3-star',
@@ -96,11 +96,13 @@ filtered_tags = (# favorate/like/love/blabla
                  'songwriter', 'singer-songwriter', 'cover', 'covers', 'seen live', 'heard on Pandora', 
                  'title is a full sentence', 'Retro', 'Miscellaneous', 'collection', 'billboard number ones', 'ost', 
                  'cover song', 'singer songwriter', 'new', 'download', 'over 5 minutes long', 'Soundtracks', 
-                 'under two minutes', 'albums I own', 'cover songs', 'Radio', 'heard on last-fm',
+                 'under two minutes', 'albums I own', 'cover songs', 'Radio', 'heard on last-fm', 'Soundtrack',
       
                  # I don't know what you are talking about
                  'buy', 'lol', 'us', 'other', '2giveme5', 'i am a party girl here is my soundtrack', 'names', 'Tag', 
                  'check out', 'f', 'test', 'out of our heads', 'me', 'I want back to the 80s', '9 lbs hammer', 'yes',
+                 'streamable track wants', 'aitch', 'slgdmbestof', 'gotanygoodmusic', 'Brems tagg radio', 'gh 3',
+                 'Sousaphonic AOTM 201102', 'fH Projex', 'GH10', 'Ion B radio', 'ik ben', 'quarkzangsun v1', 
                  )  
 
 # <codecell>
@@ -132,6 +134,10 @@ with open(uniq_tag_f, 'rb') as f:
 # <codecell>
 
 tags = ['NO_TAGS'] + sorted(stag_to_tag.keys())
+
+# <codecell>
+
+tags
 
 # <codecell>
 
