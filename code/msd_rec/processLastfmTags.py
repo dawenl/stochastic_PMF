@@ -133,7 +133,7 @@ with open(uniq_tag_f, 'rb') as f:
 
 # <codecell>
 
-tags = ['NO_TAGS'] + sorted(stag_to_tag.keys())
+tags = sorted(stag_to_tag.keys())
 
 # <codecell>
 
@@ -158,12 +158,11 @@ def getValidTrackTags(cur, track, tid, vocab, voc_to_num):
         stag = sanitize(vocab[tag-1])
         if stag not in voc_to_num:
             continue
-        if voc_to_num[stag] in out:          
-            out[voc_to_num[stag]] += float(val)
+        if voc_to_num[stag] in out: 
+            new_val = min(100, out[voc_to_num[stag]] + float(val))
+            out[voc_to_num[stag]] = new_val
         else:
             out[voc_to_num[stag]] = float(val)
-    if len(out) == 0:
-        out[voc_to_num['NO_TAGS']] = 1
     return out
 
 
@@ -175,7 +174,8 @@ def numberize(infile, outfile, cur_md, cur_td, tid, vocab, voc_to_num):
                 if track not in tid:
                     continue
                 out = getValidTrackTags(cur_td, track, tid, vocab, voc_to_num)
-                fw.write('%s\t%s\n' % (track, ' '.join('%d:%.1f' % pair for pair in out.items())))    
+                if len(out) != 0:
+                    fw.write('%s\t%s\n' % (track, ' '.join('%d:%.1f' % pair for pair in out.items())))    
 
 # <codecell>
 
@@ -187,6 +187,24 @@ with sqlite3.connect(md_dbfile) as conn_md, sqlite3.connect(tags_dbfile) as conn
     
     numberize('artists_train.txt', 'tracks_tag_train.num', cur_md, cur_td, tid, vocab, voc_to_num)
     numberize('artists_test.txt', 'tracks_tag_test.num', cur_md, cur_td, tid, vocab, voc_to_num)
+
+# <codecell>
+
+def densify(infile, outfile, ncol):
+    with open(infile, 'rb') as fr, open(outfile, 'wb') as fw:
+        for line in fr:
+            pairs = line.split('\t')[-1].strip().split()
+            keyvals = [p.split(':') for p in pairs]
+            keyvals = [(int(key), float(val)) for key, val in keyvals]
+            row = [0] * ncol
+            for (k, v) in keyvals:
+                row[k] = v
+            fw.write(' '.join(str(x) for x in row) + '\n')
+
+# <codecell>
+
+densify('tracks_tag_train.num', 'tracks_tag.dense.train', len(tags))
+densify('tracks_tag_test.num', 'tracks_tag.dense.test', len(tags))
 
 # <codecell>
 
