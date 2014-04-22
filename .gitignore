@@ -39,3 +39,6 @@ nosetests.xml
 *.num
 *.txt
 *.swp
+output_*
+*.cPickle
+*.npy

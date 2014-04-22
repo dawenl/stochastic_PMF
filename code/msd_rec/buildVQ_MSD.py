@@ -8,6 +8,7 @@ import itertools
 import json
 import operator
 import os
+import scipy.sparse
 
 import hdf5_getters
 import HartiganOnline, VectorQuantizer
@@ -68,15 +69,43 @@ for i in xrange(0, 50000, 1000):
 hist(track_to_hotttnesss.values(), bins=20)
 pass
 
+# <headingcell level=1>
+
+# Now let's get the training split
+
 # <codecell>
 
-# randomly select 47500 non-zero-hotttnesss tracks and 2500 zeros-hotttnesss tracks
+def get_tracks(filename):
+    tracks = list()
+    with open(filename, 'rb') as f:
+        for line in f:
+            tracks.append(line.split('\t')[0].strip())
+    return tracks
+
+# <codecell>
+
+train_tracks = get_tracks('tracks_tag_train.num')
+test_tracks = get_tracks('tracks_tag_test.num')
+
+# <codecell>
+
+train_track_to_hotttnesss = dict((track, track_to_hotttnesss[track]) 
+                                 for track in filter(lambda x: x in track_to_hotttnesss, train_tracks))
+
+# <codecell>
+
+hist(train_track_to_hotttnesss.values(), bins=20)
+pass
+
+# <codecell>
+
+# randomly select 24000 non-zero-hotttnesss tracks and 1000 zeros-hotttnesss tracks from the training split
 np.random.seed(98765)
-tracks_nzhotttnesss = np.random.choice(filter(lambda x: track_to_hotttnesss[x] != 0.0, track_to_hotttnesss.keys()), 
-                                       size=47500, replace=False)
-tracks_zhotttnesss = np.random.choice(filter(lambda x: track_to_hotttnesss[x] == 0.0, track_to_hotttnesss.keys()), 
-                                      size=2500, replace=False)
-tracks_VQ = np.hstack((tracks_nzhotttnesss, tracks_zhotttnesss))
+tracks_nzhotttnesss = np.random.choice(filter(lambda x: train_track_to_hotttnesss[x] != 0.0, train_track_to_hotttnesss.keys()), 
+                                       size=24000, replace=False)
+tracks_zhotttnesss = np.random.choice(filter(lambda x: train_track_to_hotttnesss[x] == 0.0, train_track_to_hotttnesss.keys()), 
+                                      size=1000, replace=False)
+tracks_VQ = np.hstack((tracks_nzhotttnesss, tracks_zhotttnesss)) 
 
 # <codecell>
 
@@ -122,6 +151,53 @@ colorbar()
 
 # <codecell>
 
-with open('Codebook_K%d_Hartigan' % K, 'wb') as f:
+with open('Codebook_K%d_Hartigan.cPickle' % K, 'wb') as f:
     pickle.dump(cluster, f)
+
+# <headingcell level=1>
+
+# Vector Quantize MSD
+
+# <codecell>
+
+with open('Codebook_K%d_Hartigan.cPickle' % K, 'wb') as f:
+    cluster = pickle.load(f)
+
+vq = VectorQuantizer.VectorQuantizer(clusterer=cluster)
+vq.center_norms_ = 0.5 * (vq.clusterer.cluster_centers_**2).sum(axis=1)
+vq.components_ = vq.clusterer.cluster_centers_
+
+# <codecell>
+
+def quantize_MSD(vq, K, msd_data_root, tracks):
+    vq_hist = scipy.sparse.lil_matrix((len(tracks), K), dtype=np.int16) # largest value availabe: 2^15-1, should be sufficient
+    for (i, d) in enumerate(data_generator(msd_data_root, tracks, shuffle=False)):
+        vq_hist[i] = vq.transform(d).sum(axis=0)
+        if not i % 1000:
+            print "%7d tracks processed" % i 
+    return vq_hist
+
+# <codecell>
+
+train_vq_hist = quantize_MSD(vq, K, MSD_DATA_ROOT, train_tracks)
+test_vq_hist = quantize_MSD(vq, K, MSD_DATA_ROOT, test_tracks)
+
+# <codecell>
+
+def save_obj(filename, obj):
+    with open(filename, 'wb') as f:
+        pickle.dump(obj, f)
+        
+def load_obj(filename):
+    with open(filename, 'rb') as f:
+        obj = pickle.load(f)
+    return obj
+
+# <codecell>
+
+save_obj('VQ_MSD_train_K%d_Hartigan.cPickle' % K, train_vq_hist)
+save_obj('VQ_MSD_test_K%d_Hartigan.cPickle' % K, test_vq_hist)
+
+# <codecell>
+
 
