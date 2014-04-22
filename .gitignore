@@ -1,4 +1,6 @@
 *.py[cod]
+.DS_Store
+.ipynb_checkpoints/
 
 # C extensions
 *.so
@@ -42,3 +44,9 @@ nosetests.xml
 output_*
 *.cPickle
 *.npy
+
+# Notes
+*.aux
+*.pdf
+*.log
+*.synctex.gz
