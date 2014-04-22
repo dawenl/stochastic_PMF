@@ -1,0 +1,97 @@
+\documentclass[10pt]{article} % For LaTeX2e
+\linespread{1}
+\usepackage[top=1in, bottom=1in, left=1in, right=1in]{geometry}
+
+\usepackage{times, amsmath, epsfig, graphicx, subcaption,url}
+\usepackage{bm}
+\usepackage{enumerate}
+\geometry{letterpaper}                   % ... or a4paper or a5paper or ... 
+\usepackage{amssymb}
+\usepackage{epstopdf}
+\newcommand{\tabincell}[2]{\begin{tabular}{@{}#1@{}}#2\end{tabular}}  
+
+\DeclareGraphicsRule{.tif}{png}{.png}{`convert #1 `dirname #1`/`basename #1 .tif`.png}
+\DeclareMathOperator*{\argmax}{arg\,max}
+\DeclareMathOperator*{\argmin}{arg\,min}
+
+\title{Poisson Matrix Factorzation}
+\author{
+Dawen Liang (\texttt{dliang@ee.columbia.edu})
+}\date{}                                           % Activate to display a given date or no date
+
+\begin{document}
+\maketitle
+
+\section{Problem Setting}\label{sec:1} 
+\begin{equation} \label{eq:model}
+\begin{split}
+\theta_{ik} &\sim \text{Gamma}(a, ac)\\
+\beta_{kd} &\sim \text{Gamma}(b, b)\\
+y_{id} &\sim \text{Poisson}( \theta_i^T \beta_d)
+\end{split}
+\end{equation}
+
+Notation: $y_{id} \in \mathbb{N}$, $\theta_i \in \mathbb{R}_{+}^{K}$, $\beta_d \in \mathbb{R}_{+}^{K}$. $i \in \{1, \cdots, I\}$ is used to index tracks. $d \in \{1, \cdots, D\}$ is used to index feature dimensions. $k \in \{1, \cdots, K\}$ is used to index latent dimensions. $c$ is a scalar we tune to maximize the likelihood. 
+
+
+\section{Variational Inference}
+
+\subsection{Variational Inference without Auxiliary variables}
+The variational distribution
+\begin{align*}
+q(\theta_{ik}) &= \text{Gamma}(\theta_{ik}; \gamma^\theta_{ik}, \rho^\theta_{ik})\\
+q(\beta_{kd}) &= \text{Gamma}(\beta_{kd}; \gamma^\beta_{kd}, \rho^\beta_{kd})
+\end{align*}
+
+The variational objective:
+\begin{align*}
+\mathcal{L} =~& \mathbb{E}_q[\log p(y, \theta, \beta)] + H(q)\\
+=~&  \sum_{y > 0} \Big( y_{id} \mathbb{E}_q[\log\sum_k \theta_{ik} \beta_{kd}] - \log y_{id}! \Big) - \sum_{i, d, k} \mathbb{E}_q[\theta_{ik} \beta_{kd}] \\
+& + \sum_{i, k}\Big( (a - \gamma_{ik}^\theta) \mathbb{E}_q [\log \theta_{ik}] - (ac - \rho_{ik}^\theta) \mathbb{E}_q[ \theta_{ik}] - A^{\Gamma}(\gamma^\theta_{ik}, \rho^\theta_{ik}) + a \log c \Big)\\
+& + \sum_{k, d}\Big( (b - \gamma_{kd}^\beta) \mathbb{E}_q [\log \beta_{kd}] - (b - \rho_{kd}^\beta) \mathbb{E}_q[\beta_{kd}] - A^{\Gamma}(\gamma^\beta_{kd}, \rho^\beta_{kd}) \Big) + \text{const}
+\end{align*}
+
+The term $\mathbb{E}_q[\log\sum_k \theta_{ik} \beta_{kd}]$ is intractable to compute. However, we can make use of the Jensen's inequality to lower bound it:
+\begin{align*}
+\mathbb{E}_q[\log\sum_k \theta_{ik} \beta_{kd}] \geq \sum_{k} \phi_{idk} \big(\mathbb{E}_q[\log \theta_{ik} \beta_{kd}] - \log \phi_{idk}\big)
+\end{align*}
+where $\phi_{idk} \geq 0$ and $\sum_k \phi_{idk} = 1$. To tighten the bound, the optimal $\phi_{idk}$'s are:
+\[
+\phi_{idk} \propto \exp\{\mathbb{E}_q [\log \theta_{ik} \beta_{kd}]\}
+\]
+The necessary expectations\footnote{Since the variational distributions for both $\theta_{ik}$ and $\beta_{kd}$ are Gamma, we will omit the expectations for $\beta_{kd}$ which is essentially the same.}:
+\begin{align*}
+\mathbb{E}_q[\theta_{ik}] &= \gamma_{ik}^\theta / \rho_{ik}^\theta \\
+\mathbb{E}_q[\log \theta_{ik}] &= \psi(\gamma_{ik}^\theta) - \log \rho_{ik}^\theta
+\end{align*}
+
+Take the derivative of the lower-bound on $\mathcal{L}$ w.r.t. the variational parameters, we can obtain the update for $\theta_{ik}$:
+\begin{align*}
+\gamma_{ik}^\theta &= a + \sum_{d: y_{id} > 0} y_{id} \phi_{idk}\\
+\rho_{ik}^\theta &= ac + \sum_d \mathbb{E}_q[\beta_{kd}]
+\end{align*}
+Similarly for $\beta_{kd}$:
+\begin{align*}
+\gamma_{kd}^\beta &= b + \sum_{i: y_{id} > 0} y_{id} \phi_{idk}\\
+\rho_{kd}^\beta &= b + \sum_i \mathbb{E}_q[\theta_{ik}]
+\end{align*}
+The optimal scale $c$:
+\[
+c^{-1} = \frac{1}{IK}\sum_{i, k} \mathbb{E}_q [\theta_{ik}]
+\]
+
+\subsection{Variational Inference with Auxiliary variables}
+
+Making use of the additive property of the Poisson distribution, we can introduce an auxiliary variable $z_{id} \in \mathbb{N}^K$ where $z_{idk} \sim \text{Poisson}(\theta_{ik} \beta_{kd})$. Therefore, $y_{id} = \sum_k z_{idk}$. 
+
+The original model in (\ref{eq:model}) is not conditionally conjugate. However, by adding the auxiliary variable $z_{id}$, we can write out the complete conditionals for each hidden variable in the closed-form:
+\begin{align*}
+\theta_{ik} | \beta, z, y &\sim \text{Gamma}(a + \sum_d z_{idk}, a + \sum_d \beta_{kd})\\
+\beta_{kd} | \theta, z, y &\sim \text{Gamma}(b + \sum_i z_{idk}, bc + \sum_i \theta_{ik})\\
+z_{id} | \theta, \beta, y &\sim \text{Multi}\Biggl(y_{id}, {\frac{\theta_i \cdot \beta_d}{\sum_k \theta_{ik} \beta_{kd}}}\Biggl)
+\end{align*}
+Here $\theta_i \cdot \beta_d$ indicates element-wise product. 
+
+\section{Stochastic Variational Inference}
+
+\end{document}  

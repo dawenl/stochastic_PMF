@@ -17,6 +17,8 @@ class PoissonNMF(BaseEstimator, TransformerMixin):
         self.n_components = n_components
         self.max_iter = max_iter
         self.tol = tol
+        self.smoothness = smoothness
+        self.random_state = random_state
         self.verbose = verbose
 
         if type(self.random_state) is int:
@@ -30,16 +32,8 @@ class PoissonNMF(BaseEstimator, TransformerMixin):
         self.a = float(kwargs.get('a', 0.1))
         self.b = float(kwargs.get('b', 0.1))
 
-    def _init_params(self, n_samples, n_feats):
-        # variational parameters for theta
-        self.gamma_t = self.smoothness \
-            * np.random.gamma(self.smoothness, 1. / self.smoothness,
-                              size=(n_samples, self.n_components))
-        self.rho_t = self.smoothness \
-            * np.random.gamma(self.smoothness, 1. / self.smoothness,
-                              size=(n_samples, self.n_components))
-        self.Et, self.Elogt = _compute_expectations(self.gamma_t, self.rho_t)
-        # variational parameters for beta
+    def _init_components(self, n_feats):
+       # variational parameters for beta
         self.gamma_b = self.smoothness \
             * np.random.gamma(self.smoothness, 1. / self.smoothness,
                               size=(self.n_components, n_feats))
@@ -48,15 +42,37 @@ class PoissonNMF(BaseEstimator, TransformerMixin):
                               size=(self.n_components, n_feats))
         self.Eb, self.Elogb = _compute_expectations(self.gamma_b, self.rho_b)
 
+    def set_components(self, shape, rate):
+        self.gamma_b, self.rho_b = shape, rate
+        self.Eb, self.Elogb = _compute_expectations(self.gamma_b, self.rho_b)
+
+    def _init_weights(self, n_samples):
+        # variational parameters for theta
+        self.gamma_t = self.smoothness \
+            * np.random.gamma(self.smoothness, 1. / self.smoothness,
+                              size=(n_samples, self.n_components))
+        self.rho_t = self.smoothness \
+            * np.random.gamma(self.smoothness, 1. / self.smoothness,
+                              size=(n_samples, self.n_components))
+        self.Et, self.Elogt = _compute_expectations(self.gamma_t, self.rho_t)
+
     def fit(self, X):
-        if not hasattr(self, 'components_'):
-            self._init_components(X)
+        n_samples, n_feats = X.shape
+        self._init_components(n_feats)
+        self._init_weights(n_samples)
         self._update(X)
         return self
 
     def transform(self, X, attr=None):
+        if not hasattr(self, 'Eb'):
+            raise ValueError('There are no pre-trained components.')
+        n_samples, n_feats = X.shape
+        if n_feats != self.Eb.shape[1]:
+            raise ValueError('The dimension of the transformed data '
+                             'does not match with the existing components.')
         if attr is None:
             attr = 'Et'
+        self._init_weights(n_samples)
         self._update(X, update_beta=False)
         return getattr(self, attr)
 
@@ -78,19 +94,17 @@ class PoissonNMF(BaseEstimator, TransformerMixin):
         pass
 
     def _update_theta(self, X):
-        #idx = (X > 0)
         self.c = 1. / np.mean(self.Et)
 
-        xxelinv = X / self._xexplog()
-        self.gamma_t = self.a + np.exp(self.Elogt) * np.dot(xxelinv, np.exp(self.Elogb).T)
+        ratio = X / self._xexplog()
+        self.gamma_t = self.a + np.exp(self.Elogt) * np.dot(ratio, np.exp(self.Elogb).T)
         self.rho_t = self.a * self.c + np.sum(self.Eb, axis=1)
         self.Et, self.Elogt = _compute_expectations(self.gamma_t, self.rho_t)
 
     def _update_beta(self, X):
-        #idx = (X > 0)
-        xxelinv = X / self._xexplog()
-        self.gamma_b = self.b + np.exp(self.Elogb) * np.dot(np.exp(self.Elogt).T, xxelinv)
-        self.rho_b = self.b + np.sum(self.Et, axis=0)
+        ratio = X / self._xexplog()
+        self.gamma_b = self.b + np.exp(self.Elogb) * np.dot(np.exp(self.Elogt).T, ratio)
+        self.rho_b = self.b + np.sum(self.Et, axis=0, keepdims=True).T
         self.Eb, self.Elogb = _compute_expectations(self.gamma_b, self.rho_b)
 
     def _xexplog(self):
@@ -99,16 +113,25 @@ class PoissonNMF(BaseEstimator, TransformerMixin):
         '''
         return np.dot(np.exp(self.Elogt), np.exp(self.Elogb))
 
-
     def _bound(self, X):
-        bound =
-
+        bound = np.sum(X * np.log(self._xexplog()) - self.Et.dot(self.Eb))
+        bound += np.sum((self.a - self.gamma_t) * self.Elogt -
+                        (self.a * self.c - self.rho_t) * self.Et +
+                        (special.gammaln(self.gamma_t) -
+                         self.gamma_t * np.log(self.rho_t)))
+        bound += self.n_components * X.shape[0] * self.a * np.log(self.c)
+        bound += np.sum((self.b - self.gamma_b) * self.Elogb -
+                        (self.b - self.rho_b) * self.Eb +
+                        (special.gammaln(self.gamma_b) -
+                         self.gamma_b * np.log(self.rho_b)))
+        return bound
 
 def _compute_expectations(alpha, beta):
     '''
     Given x ~ Gam(alpha, beta), compute E[x] and E[log x]
     '''
     return (alpha / beta, special.psi(alpha) - np.log(beta))
+
 
 class OnlinePoissonNMF():
     pass
