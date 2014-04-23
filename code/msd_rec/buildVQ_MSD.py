@@ -13,6 +13,8 @@ import scipy.sparse
 import hdf5_getters
 import HartiganOnline, VectorQuantizer
 
+from joblib import Parallel, delayed
+
 # <codecell>
 
 MSD_DIR = u'/q/boar/boar-p9/MillionSong/'
@@ -169,34 +171,23 @@ vq.components_ = vq.clusterer.cluster_centers_
 
 # <codecell>
 
-def quantize_MSD(vq, K, msd_data_root, tracks):
-    vq_hist = scipy.sparse.lil_matrix((len(tracks), K), dtype=np.int16) # largest value availabe: 2^15-1, should be sufficient
-    for (i, d) in enumerate(data_generator(msd_data_root, tracks, shuffle=False)):
-        vq_hist[i] = vq.transform(d).sum(axis=0)
-        if not i % 1000:
-            print "%7d tracks processed" % i 
-    return vq_hist
+def quantize_and_save(vq, K, msd_data_root, track_ID):
+    track_dir = os.path.join(msd_data_root, '/'.join(track_ID[2:5]), track_ID + '.h5')
+    h5 = hdf5_getters.open_h5_file_read(track_dir)
+    mfcc = hdf5_getters.get_segments_timbre(h5)
+    h5.close()
+
+    vq_hist = vq.transform(mfcc).sum(axis=0).astype(np.int16)
+    tdir = os.path.join('vq_hist', '/'.join(track_ID[2:5]))
+    if not os.path.exists(tdir):
+        os.makedirs(tdir)
+    np.save(os.path.join(tdir, track_ID + '_K%d' % K), vq_hist)
+    pass
 
 # <codecell>
 
-train_vq_hist = quantize_MSD(vq, K, MSD_DATA_ROOT, train_tracks)
-test_vq_hist = quantize_MSD(vq, K, MSD_DATA_ROOT, test_tracks)
-
-# <codecell>
-
-def save_obj(filename, obj):
-    with open(filename, 'wb') as f:
-        pickle.dump(obj, f)
-        
-def load_obj(filename):
-    with open(filename, 'rb') as f:
-        obj = pickle.load(f)
-    return obj
-
-# <codecell>
-
-save_obj('VQ_MSD_train_K%d_Hartigan.cPickle' % K, train_vq_hist)
-save_obj('VQ_MSD_test_K%d_Hartigan.cPickle' % K, test_vq_hist)
+Parallel(n_jobs=n_jobs)(delayed(quantize_and_save)(vq, K, MSD_DATA_ROOT, track_ID) for track_ID in train_tracks)
+Parallel(n_jobs=n_jobs)(delayed(quantize_and_save)(vq, K, MSD_DATA_ROOT, track_ID) for track_ID in test_tracks)                                                                     
 
 # <codecell>
 
