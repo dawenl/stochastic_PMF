@@ -190,22 +190,26 @@ with sqlite3.connect(md_dbfile) as conn_md, sqlite3.connect(tags_dbfile) as conn
 
 # <codecell>
 
-def densify(infile, outfile, ncol):
-    with open(infile, 'rb') as fr, open(outfile, 'wb') as fw:
+def densify_and_save(infile, ncol):
+    with open(infile, 'rb') as fr:
         for line in fr:
-            pairs = line.split('\t')[-1].strip().split()
+            tmp = line.split('\t', 2)
+            tid = tmp[0].strip()
+            tdir = os.path.join('vq_hist', '/'.join(tid[2:5]))
+            # this folder should already exist
+            assert os.path.exists(tdir)
+            
+            pairs = tmp[-1].strip().split()
             keyvals = [p.split(':') for p in pairs]
             keyvals = [(int(key), float(val)) for key, val in keyvals]
-            row = [0] * ncol
+            row = np.zeros((ncol, ), dtype=np.int16)
             for (k, v) in keyvals:
                 row[k] = v
-            fw.write(' '.join(str(x) for x in row) + '\n')
+            np.save(os.path.join(tdir, tid + '_BoT'), row)
+    pass
 
 # <codecell>
 
-densify('tracks_tag_train.num', 'tracks_tag.dense.train', len(tags))
-densify('tracks_tag_test.num', 'tracks_tag.dense.test', len(tags))
-
-# <codecell>
-
+densify_and_save('tracks_tag_train.num', len(tags))
+densify_and_save('tracks_tag_test.num', len(tags))
 

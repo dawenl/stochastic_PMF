@@ -186,8 +186,9 @@ def quantize_and_save(vq, K, msd_data_root, track_ID):
 
 # <codecell>
 
-Parallel(n_jobs=n_jobs)(delayed(quantize_and_save)(vq, K, MSD_DATA_ROOT, track_ID) for track_ID in train_tracks)
-Parallel(n_jobs=n_jobs)(delayed(quantize_and_save)(vq, K, MSD_DATA_ROOT, track_ID) for track_ID in test_tracks)                                                                     
+n_jobs = 5
+Parallel(n_jobs=n_jobs)(delayed(quantize_and_save)(vq, K, MSD_DATA_ROOT, track_ID) 
+                        for track_ID in itertools.chain(train_tracks, test_tracks))
 
 # <codecell>
 
