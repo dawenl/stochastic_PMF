@@ -141,6 +141,7 @@ class OnlinePoissonNMF(BaseEstimator, TransformerMixin):
         self.n_components = n_components
         self.batch_size = batch_size
         self.max_iter = max_iter
+        self.tol = tol
         self.shuffle = shuffle
         self.smoothness = smoothness
         self.random_state = random_state
