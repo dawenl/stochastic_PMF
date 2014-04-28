@@ -134,14 +134,15 @@ def _compute_expectations(alpha, beta):
 
 
 class OnlinePoissonNMF(BaseEstimator, TransformerMixin):
-    def __init__(self, n_components=100, batch_size=10, smoothness=100,
-                 max_iter=10, shuffle=True,
+    def __init__(self, n_components=100, batch_size=10, max_iter=10,
+                 shuffle=True, smoothness=100,
                  random_state=None, verbose=False,
                  **kwargs):
         self.n_components = n_components
         self.batch_size = batch_size
-        self.smoothness = smoothness
+        self.max_iter = max_iter
         self.shuffle = shuffle
+        self.smoothness = smoothness
         self.random_state = random_state
         self.verbose = verbose
 
