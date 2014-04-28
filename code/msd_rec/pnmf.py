@@ -135,7 +135,7 @@ def _compute_expectations(alpha, beta):
 
 class OnlinePoissonNMF(BaseEstimator, TransformerMixin):
     def __init__(self, n_components=100, batch_size=10, smoothness=100,
-                 max_iter=100, tol=0.0005, shuffle=True,
+                 max_iter=10, shuffle=True,
                  random_state=None, verbose=False,
                  **kwargs):
         self.n_components = n_components
@@ -181,17 +181,21 @@ class OnlinePoissonNMF(BaseEstimator, TransformerMixin):
                               size=(n_samples, self.n_components))
         self.Et, self.Elogt = _compute_expectations(self.gamma_t, self.rho_t)
 
-    def fit(self, X, shuffle):
+    def fit(self, X):
         n_samples, n_feats = X.shape
         self.scale = float(n_samples) / self.batch_size
         self._init_components(n_feats)
-        indices = np.arange(n_samples)
-        if self.shuffle:
-            np.random.shuffle(indices)
-        for i in xrange(0, n_samples, self.batch_size):
-            iend = min(i + self.batch_size, n_samples)
-            self.rho = (i + self.t0)**(-self.kappa)
-            self.partial_fit(X[indices[i]: indices[iend]])
+        self.bound = list()
+        for _ in xrange(self.max_iter):
+            indices = np.arange(n_samples)
+            if self.shuffle:
+                np.random.shuffle(indices)
+            for i in xrange(0, n_samples, self.batch_size):
+                iend = min(i + self.batch_size, n_samples)
+                self.rho = (i + self.t0)**(-self.kappa)
+                mini_batch = X[indices[i]: indices[iend]]
+                self.partial_fit(mini_batch)
+                self.bound.append(self._bound(mini_batch))
         return self
 
     def partial_fit(self, X):
@@ -254,12 +258,12 @@ class OnlinePoissonNMF(BaseEstimator, TransformerMixin):
         return np.dot(np.exp(self.Elogt), np.exp(self.Elogb))
 
     def _bound(self, X):
-        bound = np.sum(X * np.log(self._xexplog()) - self.Et.dot(self.Eb))
-        bound += np.sum((self.a - self.gamma_t) * self.Elogt -
-                        (self.a * self.c - self.rho_t) * self.Et +
-                        (special.gammaln(self.gamma_t) -
-                         self.gamma_t * np.log(self.rho_t)))
-        bound += self.n_components * X.shape[0] * self.a * np.log(self.c)
+        bound = self.scale * np.sum(X * np.log(self._xexplog()) - self.Et.dot(self.Eb))
+        bound += self.scale * np.sum((self.a - self.gamma_t) * self.Elogt -
+                                     (self.a * self.c - self.rho_t) * self.Et +
+                                     (special.gammaln(self.gamma_t) -
+                                      self.gamma_t * np.log(self.rho_t)))
+        bound += self.scale * self.n_components * X.shape[0] * self.a * np.log(self.c)
         bound += np.sum((self.b - self.gamma_b) * self.Elogb -
                         (self.b - self.rho_b) * self.Eb +
                         (special.gammaln(self.gamma_b) -
