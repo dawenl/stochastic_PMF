@@ -36,19 +36,19 @@ Notation: $y_{id} \in \mathbb{N}$, $\theta_i \in \mathbb{R}_{+}^{K}$, $\beta_d \
 
 \section{Variational Inference}
 
-\subsection{Variational Inference without Auxiliary variables}
+\subsection{Batch Variational Inference}
 The variational distribution
 \begin{align*}
-q(\theta_{ik}) &= \text{Gamma}(\theta_{ik}; \gamma^\theta_{ik}, \rho^\theta_{ik})\\
-q(\beta_{kd}) &= \text{Gamma}(\beta_{kd}; \gamma^\beta_{kd}, \rho^\beta_{kd})
+q(\theta_{ik}) &= \text{Gamma}(\theta_{ik}; \gamma_{ik}, \chi_{ik})\\
+q(\beta_{kd}) &= \text{Gamma}(\beta_{kd}; \nu_{kd},  \lambda_{kd})
 \end{align*}
 
 The variational objective:
 \begin{align*}
 \mathcal{L} =~& \mathbb{E}_q[\log p(y, \theta, \beta)] + H(q)\\
 =~&  \sum_{y > 0} \Big( y_{id} \mathbb{E}_q[\log\sum_k \theta_{ik} \beta_{kd}] - \log y_{id}! \Big) - \sum_{i, d, k} \mathbb{E}_q[\theta_{ik} \beta_{kd}] \\
-& + \sum_{i, k}\Big( (a - \gamma_{ik}^\theta) \mathbb{E}_q [\log \theta_{ik}] - (ac - \rho_{ik}^\theta) \mathbb{E}_q[ \theta_{ik}] - A^{\Gamma}(\gamma^\theta_{ik}, \rho^\theta_{ik}) + a \log c \Big)\\
-& + \sum_{k, d}\Big( (b - \gamma_{kd}^\beta) \mathbb{E}_q [\log \beta_{kd}] - (b - \rho_{kd}^\beta) \mathbb{E}_q[\beta_{kd}] - A^{\Gamma}(\gamma^\beta_{kd}, \rho^\beta_{kd}) \Big) + \text{const}
+& + \sum_{i, k}\Big( (a - \gamma_{ik}) \mathbb{E}_q [\log \theta_{ik}] - (ac - \chi_{ik}) \mathbb{E}_q[ \theta_{ik}] - A^{\Gamma}(\gamma_{ik}, \chi_{ik}) + a \log c \Big)\\
+& + \sum_{k, d}\Big( (b - \nu_{kd}) \mathbb{E}_q [\log \beta_{kd}] - (b - \lambda_{kd}) \mathbb{E}_q[\beta_{kd}] - A^{\Gamma}(\nu_{kd}, \lambda_{kd}) \Big) + \text{const}
 \end{align*}
 
 The term $\mathbb{E}_q[\log\sum_k \theta_{ik} \beta_{kd}]$ is intractable to compute. However, we can make use of the Jensen's inequality to lower bound it:
@@ -61,37 +61,63 @@ where $\phi_{idk} \geq 0$ and $\sum_k \phi_{idk} = 1$. To tighten the bound, the
 \]
 The necessary expectations\footnote{Since the variational distributions for both $\theta_{ik}$ and $\beta_{kd}$ are Gamma, we will omit the expectations for $\beta_{kd}$ which is essentially the same.}:
 \begin{align*}
-\mathbb{E}_q[\theta_{ik}] &= \gamma_{ik}^\theta / \rho_{ik}^\theta \\
-\mathbb{E}_q[\log \theta_{ik}] &= \psi(\gamma_{ik}^\theta) - \log \rho_{ik}^\theta
+\mathbb{E}_q[\theta_{ik}] &= \gamma_{ik} / \chi_{ik} \\
+\mathbb{E}_q[\log \theta_{ik}] &= \psi(\gamma_{ik}) - \log \chi_{ik}
 \end{align*}
 
 Take the derivative of the lower-bound on $\mathcal{L}$ w.r.t. the variational parameters, we can obtain the update for $\theta_{ik}$:
 \begin{align*}
-\gamma_{ik}^\theta &= a + \sum_{d: y_{id} > 0} y_{id} \phi_{idk}\\
-\rho_{ik}^\theta &= ac + \sum_d \mathbb{E}_q[\beta_{kd}]
+\gamma_{ik} &= a + \sum_{d: y_{id} > 0} y_{id} \phi_{idk}\\
+\chi_{ik} &= ac + \sum_d \mathbb{E}_q[\beta_{kd}]
 \end{align*}
 Similarly for $\beta_{kd}$:
 \begin{align*}
-\gamma_{kd}^\beta &= b + \sum_{i: y_{id} > 0} y_{id} \phi_{idk}\\
-\rho_{kd}^\beta &= b + \sum_i \mathbb{E}_q[\theta_{ik}]
+\nu_{kd} &= b + \sum_{i: y_{id} > 0} y_{id} \phi_{idk}\\
+\lambda_{kd} &= b + \sum_i \mathbb{E}_q[\theta_{ik}]
 \end{align*}
 The optimal scale $c$:
 \[
 c^{-1} = \frac{1}{IK}\sum_{i, k} \mathbb{E}_q [\theta_{ik}]
 \]
 
-\subsection{Variational Inference with Auxiliary variables}
+%\subsection{Variational Inference with Auxiliary variables}
+%
+%Making use of the additive property of the Poisson distribution, we can introduce an auxiliary variable $z_{id} \in \mathbb{N}^K$ where $z_{idk} \sim \text{Poisson}(\theta_{ik} \beta_{kd})$. Therefore, $y_{id} = \sum_k z_{idk}$. 
+%
+%The original model in (\ref{eq:model}) is not conditionally conjugate. However, by adding the auxiliary variable $z_{id}$, we can write out the complete conditionals for each hidden variable in the closed-form:
+%\begin{align*}
+%\theta_{ik} | \beta, z, y &\sim \text{Gamma}(a + \sum_d z_{idk}, a + \sum_d \beta_{kd})\\
+%\beta_{kd} | \theta, z, y &\sim \text{Gamma}(b + \sum_i z_{idk}, bc + \sum_i \theta_{ik})\\
+%z_{id} | \theta, \beta, y &\sim \text{Multi}\Biggl(y_{id}, {\frac{\theta_i \cdot \beta_d}{\sum_k \theta_{ik} \beta_{kd}}}\Biggl)
+%\end{align*}
+%Here $\theta_i \cdot \beta_d$ indicates element-wise product. 
 
-Making use of the additive property of the Poisson distribution, we can introduce an auxiliary variable $z_{id} \in \mathbb{N}^K$ where $z_{idk} \sim \text{Poisson}(\theta_{ik} \beta_{kd})$. Therefore, $y_{id} = \sum_k z_{idk}$. 
+\subsection{Stochastic Variational Inference}
 
-The original model in (\ref{eq:model}) is not conditionally conjugate. However, by adding the auxiliary variable $z_{id}$, we can write out the complete conditionals for each hidden variable in the closed-form:
+In iteration $t$, instead of directly optimizing the variational objective over the entire data, which could be computationally intensive for large dataset, we can instead adopt stochastic optimization to optimize a noisy version of it by selecting a subset (mini-batch) of the data, indexed by $B_t \subset \{1, \cdots, I\}$:
+\[
+\mathcal{L}_t = \frac{I}{|B_t|}\sum_{i \in B_t} \mathbb{E}_q[\log p(y_i , \theta_i | \beta)]  + \mathbb{E}_q[\log p(\beta)] + H(q)
+\]
+By optimizing $\mathcal{L}_t$ during iteration $t$, we are optimizing $\mathcal{L}$ in expectation. 
+
+The update for weights $\theta_{ik}$ are essentially the same with the batch inference, except that now we are only considering the mini-batch of data:
 \begin{align*}
-\theta_{ik} | \beta, z, y &\sim \text{Gamma}(a + \sum_d z_{idk}, a + \sum_d \beta_{kd})\\
-\beta_{kd} | \theta, z, y &\sim \text{Gamma}(b + \sum_i z_{idk}, bc + \sum_i \theta_{ik})\\
-z_{id} | \theta, \beta, y &\sim \text{Multi}\Biggl(y_{id}, {\frac{\theta_i \cdot \beta_d}{\sum_k \theta_{ik} \beta_{kd}}}\Biggl)
+\gamma_{ik} &= a + \sum_{d: y_{id} > 0} y_{id} \phi_{idk}\\
+\chi_{ik} &= ac + \sum_d \mathbb{E}_q[\beta_{kd}]
 \end{align*}
-Here $\theta_i \cdot \beta_d$ indicates element-wise product. 
+for $i \in B_t$. The optimal scale $c$:
+\[
+c^{-1} = \frac{1}{|B_t| K}\sum_{i \in B_t, k} \mathbb{E}_q [\theta_{ik}]
+\]
 
-\section{Stochastic Variational Inference}
-
+Then to optimize $\beta_{kd}$, 
+\begin{align*}
+\nu_{kd}^{(t)} &= (1 - \rho_t) \nu_{kd}^{(t-1)} + \rho_t \biggl(b +  \frac{I}{|B_t|}\sum_{i \in B_t} y_{id} \phi_{idk}\biggl)\\
+\lambda_{kd}^{(t)} &= (1 - \rho_t) \lambda_{kd}^{(t-1)} + \rho_t \biggl( b +  \frac{I}{|B_t|}\sum_{i \in B_t} \mathbb{E}_q[\theta_{ik}]\biggl)
+\end{align*}
+where $\rho_t$ is a step size at iteration $t$. To ensure convergence, the following conditions must be satisfied:
+\[
+\sum_{t=1}^\infty\rho_t = \infty  \text{ and } \sum_{t=1}^\infty \rho_t^2 < \infty
+\]
+One possible choice of $\rho_t$ is: $\rho_t = (t_0 + t)^{-\kappa}$ for $t_0 > 0$ and $\kappa \in (0.5, 1]$. 
 \end{document}  
