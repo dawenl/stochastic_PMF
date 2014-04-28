@@ -139,6 +139,7 @@ class OnlinePoissonNMF(BaseEstimator, TransformerMixin):
                  random_state=None, verbose=False,
                  **kwargs):
         self.n_components = n_components
+        self.batch_size = batch_size
         self.smoothness = smoothness
         self.shuffle = shuffle
         self.random_state = random_state
