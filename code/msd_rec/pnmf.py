@@ -184,22 +184,29 @@ class OnlinePoissonNMF(BaseEstimator, TransformerMixin):
             * np.random.gamma(self.smoothness, 1. / self.smoothness,
                               size=(n_samples, self.n_components))
         self.Et, self.Elogt = _compute_expectations(self.gamma_t, self.rho_t)
+        self.c = 1. / np.mean(self.Et)
 
     def fit(self, X):
         n_samples, n_feats = X.shape
         self.scale = float(n_samples) / self.batch_size
         self._init_components(n_feats)
         self.bound = list()
-        for _ in xrange(self.n_pass):
+        for count in xrange(self.n_pass):
+            if self.verbose:
+                print 'Iteration %d: passing through the data...' % count
             indices = np.arange(n_samples)
             if self.shuffle:
                 np.random.shuffle(indices)
-            for i in xrange(0, n_samples, self.batch_size):
-                iend = min(i + self.batch_size, n_samples)
+            X_shuffled = X[indices]
+            for (i, istart) in enumerate(xrange(0, n_samples,
+                                                self.batch_size), 1):
+                iend = min(istart + self.batch_size, n_samples)
                 self.rho = (i + self.t0)**(-self.kappa)
-                mini_batch = X[indices[i]: indices[iend]]
+                mini_batch = X_shuffled[istart: iend]
                 self.partial_fit(mini_batch)
-                self.bound.append(self._bound(mini_batch))
+                self.bound.append(self._stoch_bound(mini_batch))
+                if self.verbose and not i % 50:
+                    print '\t%d mini-batches finished.' % i
         return self
 
     def partial_fit(self, X):
@@ -209,7 +216,6 @@ class OnlinePoissonNMF(BaseEstimator, TransformerMixin):
         self.gamma_b = (1 - self.rho) * self.gamma_b + self.rho * (self.b + self.scale * np.exp(self.Elogb) * np.dot(np.exp(self.Elogt).T, ratio))
         self.rho_b = (1 - self.rho) * self.rho_b + self.rho * (self.b + self.scale * np.sum(self.Et, axis=0, keepdims=True).T)
         self.Eb, self.Elogb = _compute_expectations(self.gamma_b, self.rho_b)
-
 
     def transform(self, X, attr=None):
         if not hasattr(self, 'Eb'):
@@ -231,23 +237,17 @@ class OnlinePoissonNMF(BaseEstimator, TransformerMixin):
             if update_beta:
                 self._update_beta(X)
             bound = self._bound(X)
-            improvement = (bound - old_bd) / abs(old_bd)
-            if self.verbose:
-                print('After ITERATION: %d\tObjective: %.2f\t'
-                      'Old objective: %.2f\t'
-                      'Improvement: %.5f' % (i, bound, old_bd, improvement))
-            if improvement < self.tol:
+            if (bound - old_bd) / abs(old_bd) < self.tol:
                 break
             old_bd = bound
         pass
 
     def _update_theta(self, X):
-        self.c = 1. / np.mean(self.Et)
-
         ratio = X / self._xexplog()
         self.gamma_t = self.a + np.exp(self.Elogt) * np.dot(ratio, np.exp(self.Elogb).T)
         self.rho_t = self.a * self.c + np.sum(self.Eb, axis=1)
         self.Et, self.Elogt = _compute_expectations(self.gamma_t, self.rho_t)
+        self.c = 1. / np.mean(self.Et)
 
     def _update_beta(self, X):
         ratio = X / self._xexplog()
@@ -262,15 +262,27 @@ class OnlinePoissonNMF(BaseEstimator, TransformerMixin):
         return np.dot(np.exp(self.Elogt), np.exp(self.Elogb))
 
     def _bound(self, X):
-        bound = self.scale * np.sum(X * np.log(self._xexplog()) - self.Et.dot(self.Eb))
-        bound += self.scale * np.sum((self.a - self.gamma_t) * self.Elogt -
-                                     (self.a * self.c - self.rho_t) * self.Et +
-                                     (special.gammaln(self.gamma_t) -
-                                      self.gamma_t * np.log(self.rho_t)))
-        bound += self.scale * self.n_components * X.shape[0] * self.a * np.log(self.c)
-        bound += np.sum((self.b - self.gamma_b) * self.Elogb -
-                        (self.b - self.rho_b) * self.Eb +
-                        (special.gammaln(self.gamma_b) -
-                         self.gamma_b * np.log(self.rho_b)))
+        bound = np.sum(X * np.log(self._xexplog()) - self.Et.dot(self.Eb))
+        bound += _gamma_term(self.a, self.a * self.c,
+                             self.gamma_t, self.rho_t,
+                             self.Et, self.Elogt)
+        bound += self.n_components * X.shape[0] * self.a * np.log(self.c)
+        bound += _gamma_term(self.b, self.b, self.gamma_b, self.rho_b,
+                             self.Eb, self.Elogb)
         return bound
 
+    def _stoch_bound(self, X):
+        bound = self.scale * np.sum(X * np.log(self._xexplog())
+                                    - self.Et.dot(self.Eb))
+        bound += self.scale * _gamma_term(self.a, self.a * self.c,
+                                          self.gamma_t, self.rho_t,
+                                          self.Et, self.Elogt)
+        bound += self.scale * self.n_components * X.shape[0] * self.a * np.log(self.c)
+        bound += _gamma_term(self.b, self.b, self.gamma_b, self.rho_b,
+                             self.Eb, self.Elogb)
+        return bound
+
+
+def _gamma_term(a, b, shape, rate, Ex, Elogx):
+    return np.sum((a - shape) * Elogx - (b - rate) * Ex +
+                  (special.gammaln(shape) - shape * np.log(rate)))
