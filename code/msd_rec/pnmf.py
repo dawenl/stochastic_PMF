@@ -134,12 +134,13 @@ def _compute_expectations(alpha, beta):
 
 
 class OnlinePoissonNMF(BaseEstimator, TransformerMixin):
-    def __init__(self, n_components=100, batch_size=10, max_iter=10,
-                 tol=0.0005, shuffle=True, smoothness=100,
+    def __init__(self, n_components=100, batch_size=10, n_pass=10,
+                 max_iter=100, tol=0.0005, shuffle=True, smoothness=100,
                  random_state=None, verbose=False,
                  **kwargs):
         self.n_components = n_components
         self.batch_size = batch_size
+        self.n_pass = n_pass
         self.max_iter = max_iter
         self.tol = tol
         self.shuffle = shuffle
@@ -189,7 +190,7 @@ class OnlinePoissonNMF(BaseEstimator, TransformerMixin):
         self.scale = float(n_samples) / self.batch_size
         self._init_components(n_feats)
         self.bound = list()
-        for _ in xrange(self.max_iter):
+        for _ in xrange(self.n_pass):
             indices = np.arange(n_samples)
             if self.shuffle:
                 np.random.shuffle(indices)
