@@ -6,6 +6,7 @@
 import functools
 import os
 import numpy as np
+from joblib import Parallel, delayed
 
 import pnmf
 
@@ -89,7 +90,7 @@ for (i, tid) in enumerate(train_tracks_subset):
     tdir = os.path.join('vq_hist', '/'.join(tid[2:5]))
     vq = np.load(os.path.join(tdir, '%s_K%d.npy' % (tid, K))).ravel()
     bot = np.load(os.path.join(tdir, '%s_BoT.npy' % tid))
-    bot[bot > 0] = 2
+    bot[bot > 0] = 1
     X[i] = np.hstack((vq, bot))
 
 # <codecell>
@@ -122,7 +123,7 @@ indices = np.random.choice(n_components, size=30, replace=False)
 figure(figsize=(45, 15))
 for i in xrange(30):
     subplot(10, 3, i+1)
-    topic = coder.Eb[indices[i]]
+    topic = coder.Eb[indices[i]].copy()
     # properly normalize the BoT dimensions for visualization purposes
     topic[K:] /= topic[K:].max()
     topic[K:] *= topic[:K].max()
@@ -150,7 +151,7 @@ n_samples, n_tags = tags_predicted.shape
 
 print tags_predicted.min(), tags_predicted.max()
 
-div_factor = 4.75
+div_factor = 5
 tags_predicted = tags_predicted - div_factor * np.mean(tags_predicted, axis=0)
 
 # <codecell>
@@ -158,12 +159,6 @@ tags_predicted = tags_predicted - div_factor * np.mean(tags_predicted, axis=0)
 predictat = 20
 tags_predicted_binary = construct_pred_mask(tags_predicted, predictat)
 tags_true_binary = (y_test > 0)
-
-# <codecell>
-
-prec, recall = per_tag_prec_recall(tags_predicted_binary, tags_true_binary)
-print np.mean(prec), np.std(prec) / sqrt(n_tags)
-print np.mean(recall), np.std(recall) / sqrt(n_tags)
 
 # <codecell>
 
@@ -193,7 +188,8 @@ print np.mean(recall), np.std(recall) / sqrt(n_tags)
 reload(pnmf)
 
 n_components = 100
-online_coder = pnmf.OnlinePoissonNMF(n_components=n_components, batch_size=10, n_pass=1, random_state=98765, verbose=True)
+online_coder = pnmf.OnlinePoissonNMF(n_components=n_components, batch_size=500, n_pass=10, 
+                                     random_state=98765, verbose=True)
 
 # <codecell>
 
@@ -201,13 +197,209 @@ online_coder.fit(X)
 
 # <codecell>
 
+plot(online_coder.bound)
+axhline(y=coder._bound(X), color='red')
+pass
 
 # <codecell>
 
+# randomly plot 30 "topics"
+indices = np.random.choice(n_components, size=30, replace=False)
+figure(figsize=(45, 15))
+for i in xrange(30):
+    subplot(10, 3, i+1)
+    topic = online_coder.Eb[indices[i]].copy()
+    # properly normalize the BoT dimensions for visualization purposes
+    #topic[K:] /= topic[K:].max()
+    #topic[K:] *= topic[:K].max()
+    bar(np.arange(D), topic)
+    axvline(x=K, color='red')
+    title('Component #%d' % indices[i])
+#savefig('stoc_dict.eps')
+
+# <codecell>
+
+ents = np.zeros((n_components, ))
+
+for k in xrange(n_components):
+    ents[k] = scipy.stats.entropy(online_coder.Eb[k])   
+
+# <codecell>
+
+idx = np.argsort(-ents)
+
+# <codecell>
+
+plot(ents[idx], '-o')
+pass
+
+# <codecell>
+
+tagger = pnmf.PoissonNMF(n_components=n_components, random_state=98765, verbose=True)
+
+# <codecell>
+
+tagger.set_components(online_coder.gamma_b[:, :K], online_coder.rho_b[:, :K])
+
+# <codecell>
+
+Et = tagger.transform(X_test)
+
+# <codecell>
+
+tags_predicted = Et.dot(online_coder.Eb[:, K:])
+n_samples, n_tags = tags_predicted.shape
+
+print tags_predicted.min(), tags_predicted.max()
+
+div_factor = 3
+tags_predicted = tags_predicted - div_factor * np.mean(tags_predicted, axis=0)
+
+# <codecell>
+
+predictat = 20
+tags_predicted_binary = construct_pred_mask(tags_predicted, predictat)
+tags_true_binary = (y_test > 0)
+
+# <codecell>
+
+prec, recall = per_tag_prec_recall(tags_predicted_binary, tags_true_binary)
+print np.mean(prec), np.std(prec) / sqrt(n_tags)
+print np.mean(recall), np.std(recall) / sqrt(n_tags)
 
 # <headingcell level=1>
 
 # Stochastic inference on the full set
+
+# <codecell>
+
+def ooc_fit(obj, train_tracks, K, n_feats):
+    n_samples = (len(train_tracks) / obj.batch_size) * obj.batch_size
+    obj.scale = float(n_samples) / obj.batch_size
+    obj._init_components(n_feats)
+    obj.bound = list()
+    for count in xrange(obj.n_pass):
+        print 'Iteration %d: passing through the data...' % count
+        indices = np.arange(n_samples)
+        if obj.shuffle:
+            np.random.shuffle(indices)
+        for (i, istart) in enumerate(xrange(0, n_samples,
+                                            obj.batch_size), 1):
+            iend = min(istart + obj.batch_size, n_samples)
+            obj.rho = (i + obj.t0)**(-obj.kappa)
+            mini_batch = np.zeros((iend - istart, n_feats))
+            for s in xrange(iend - istart):
+                tid = train_tracks[indices[istart + s]]
+                #print '\tRead in track: %s' % tid
+                tdir = os.path.join('vq_hist', '/'.join(tid[2:5]))
+                vq = np.load(os.path.join(tdir, '%s_K%d.npy' % (tid, K))).ravel()
+                bot = np.load(os.path.join(tdir, '%s_BoT.npy' % tid))
+                bot[bot > 0] = 1                
+                mini_batch[s] = np.hstack((vq, bot))
+            obj.partial_fit(mini_batch)
+            obj.bound.append(obj._stoch_bound(mini_batch))
+            if not i % 50:
+                print '\t%d mini-batches finished.' % i
+    return obj
+
+# <codecell>
+
+reload(pnmf)
+
+n_components = 100
+online_coder_full = pnmf.OnlinePoissonNMF(n_components=n_components, batch_size=1000, n_pass=1, 
+                                          random_state=98765, verbose=True)
+
+# <codecell>
+
+K = 2048
+D = K + len(tags)
+
+online_coder_full = ooc_fit(online_coder_full, train_tracks, K, D)
+
+# <codecell>
+
+plot(online_coder_full.bound)
+pass
+
+# <codecell>
+
+np.mean(online_coder_full.bound[-100:])
+
+# <codecell>
+
+# randomly plot 30 "topics"
+indices = np.random.choice(n_components, size=30, replace=False)
+figure(figsize=(45, 15))
+for i in xrange(30):
+    subplot(10, 3, i+1)
+    topic = online_coder_full.Eb[indices[i]].copy()
+    # properly normalize the BoT dimensions for visualization purposes
+    #topic[K:] /= topic[K:].max()
+    #topic[K:] *= topic[:K].max()
+    bar(np.arange(D), topic)
+    axvline(x=K, color='red')
+    title('Component #%d' % indices[i])
+#savefig('stoc_dict.eps')
+
+# <codecell>
+
+ents = np.zeros((n_components, ))
+
+for k in xrange(n_components):
+    ents[k] = scipy.stats.entropy(online_coder_full.Eb[k])   
+
+# <codecell>
+
+idx = np.argsort(-ents)
+
+# <codecell>
+
+plot(ents[idx], '-o')
+pass
+
+# <codecell>
+
+tagger = pnmf.PoissonNMF(n_components=n_components, random_state=98765, verbose=True)
+
+# <codecell>
+
+tagger.set_components(online_coder_full.gamma_b[:, :K], online_coder_full.rho_b[:, :K])
+
+# <codecell>
+
+Et = tagger.transform(X_test)
+
+# <codecell>
+
+tags_predicted = Et.dot(online_coder_full.Eb[:, K:])
+n_samples, n_tags = tags_predicted.shape
+
+print tags_predicted.min(), tags_predicted.max()
+
+div_factor = 3
+tags_predicted = tags_predicted - div_factor * np.mean(tags_predicted, axis=0)
+
+# <codecell>
+
+predictat = 20
+tags_predicted_binary = construct_pred_mask(tags_predicted, predictat)
+tags_true_binary = (y_test > 0)
+
+# <codecell>
+
+prec, recall = per_tag_prec_recall(tags_predicted_binary, tags_true_binary)
+print np.mean(prec), np.std(prec) / sqrt(n_tags)
+print np.mean(recall), np.std(recall) / sqrt(n_tags)
+
+# <codecell>
+
+import cPickle as pickle
+
+# <codecell>
+
+with open('online_NMF_K%d_N%d_S%d.cPickle' % (K, n_components, online_coder_full.batch_size), 'wb') as f:
+    pickle.dump(online_coder_full, f)
 
 # <codecell>
 
