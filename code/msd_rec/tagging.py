@@ -214,7 +214,6 @@ online_coder.fit(X)
 # <codecell>
 
 plot(online_coder.bound)
-axhline(y=coder._bound(X), color='red')
 pass
 
 # <codecell>
@@ -306,7 +305,7 @@ def ooc_fit(obj, train_tracks, K, n_feats):
                 tdir = os.path.join('vq_hist', '/'.join(tid[2:5]))
                 vq = np.load(os.path.join(tdir, '%s_K%d.npy' % (tid, K))).ravel()
                 bot = np.load(os.path.join(tdir, '%s_BoT.npy' % tid))
-                bot[bot > 0] = 2               
+                bot[bot > 0] = 1               
                 mini_batch[s] = np.hstack((vq, bot))
             obj.partial_fit(mini_batch)
             obj.bound.append(obj._stoch_bound(mini_batch))
@@ -455,11 +454,6 @@ predictat = 20
 tags_true_binary = (y_test > 0)
 
 print_out_metrics(tags_true_binary, tags_predicted, predictat)
-
-# <codecell>
-
-with open('online_NMF_K%d_N%d_S%d.cPickle' % (K, n_components, online_coder_full.batch_size), 'wb') as f:
-    pickle.dump(online_coder_full, f)
 
 # <codecell>
 
