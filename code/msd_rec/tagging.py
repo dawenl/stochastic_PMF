@@ -3,10 +3,14 @@
 
 # <codecell>
 
+import cPickle as pickle
 import functools
 import os
 import numpy as np
+import scipy.stats
+
 from joblib import Parallel, delayed
+from sklearn.metrics import roc_auc_score, average_precision_score
 
 import pnmf
 
@@ -43,9 +47,37 @@ def construct_pred_mask(tags_predicted, predictat):
 
 def per_tag_prec_recall(tags_predicted_binary, tags_true_binary):
     mask = np.logical_and(tags_predicted_binary, tags_true_binary)
-    prec = mask.sum(axis=0) / (np.sum(tags_predicted_binary, axis=0) + np.spacing(1))
-    recall = mask.sum(axis=0) / (np.sum(tags_true_binary, axis=0) + np.spacing(1))
+    prec = mask.sum(axis=0) / (tags_predicted_binary.sum(axis=0) + np.spacing(1))
+    tags_true_count = tags_true_binary.sum(axis=0).astype(float)
+    idx = (tags_true_count > 0)
+    recall = mask.sum(axis=0)[idx] / tags_true_count[idx]
     return prec, recall
+
+
+def aroc_ap(tags_true_binary, tags_predicted):
+    n_tags = tags_true_binary.shape[1]
+    
+    auc = list()
+    aprec = list()
+    for i in xrange(n_tags):
+        if np.sum(tags_true_binary[:, i]) != 0:
+            auc.append(roc_auc_score(tags_true_binary[:, i], tags_predicted[:, i]))
+            aprec.append(average_precision_score(tags_true_binary[:, i], tags_predicted[:, i]))
+    return auc, aprec
+
+
+def print_out_metrics(tags_true_binary, tags_predicted, predictat):
+    tags_predicted_binary = construct_pred_mask(tags_predicted, predictat)
+    prec, recall = per_tag_prec_recall(tags_predicted_binary, tags_true_binary)
+    mprec, mrecall = np.mean(prec), np.mean(recall)
+    
+    print 'Precision = %.3f (%.3f)' % (mprec, np.std(prec) / sqrt(prec.size))
+    print 'Recall = %.3f (%.3f)' % (mrecall, np.std(recall) / sqrt(recall.size))
+    print 'F-score = %.3f' % (2 * mprec * mrecall / (mprec + mrecall))
+
+    auc, aprec = aroc_ap(tags_true_binary, tags_predicted)
+    print 'AROC = %.3f (%.3f)' % (np.mean(auc), np.std(auc) / sqrt(len(auc)))
+    print 'AP = %.3f (%.3f)' % (np.mean(aprec), np.std(aprec) / sqrt(len(aprec)))
 
 # <codecell>
 
@@ -77,14 +109,18 @@ pass
 
 K = 512
 
+# <codecell>
+
+n_subset = 10000
+
 np.random.seed(98765)
-train_tracks_subset = np.random.choice(train_tracks, size=10000, replace=False)
+train_tracks_subset = np.random.choice(train_tracks, size=n_subset, replace=False)
 
 # <codecell>
 
 D = K + len(tags)
 
-X = np.empty((10000, D), dtype=np.int16)
+X = np.empty((n_subset, D), dtype=np.int16)
 
 for (i, tid) in enumerate(train_tracks_subset):
     tdir = os.path.join('vq_hist', '/'.join(tid[2:5]))
@@ -147,37 +183,17 @@ Et = tagger.transform(X_test)
 # <codecell>
 
 tags_predicted = Et.dot(coder.Eb[:, K:])
-n_samples, n_tags = tags_predicted.shape
-
 print tags_predicted.min(), tags_predicted.max()
 
-div_factor = 5
+div_factor = 3
 tags_predicted = tags_predicted - div_factor * np.mean(tags_predicted, axis=0)
 
 # <codecell>
 
 predictat = 20
-tags_predicted_binary = construct_pred_mask(tags_predicted, predictat)
 tags_true_binary = (y_test > 0)
 
-# <codecell>
-
-prec, recall = per_tag_prec_recall(tags_predicted_binary, tags_true_binary)
-print np.mean(prec), np.std(prec) / sqrt(n_tags)
-print np.mean(recall), np.std(recall) / sqrt(n_tags)
-
-# <codecell>
-
-tags_random_binary = np.zeros((n_samples, n_tags), dtype=bool)
-for i in xrange(n_samples):
-    idx = np.random.choice(n_tags, size=predictat, replace=False)
-    tags_random_binary[i, idx] = 1
-
-# <codecell>
-
-prec, recall = per_tag_prec_recall(tags_random_binary, tags_true_binary)
-print np.mean(prec), np.std(prec) / sqrt(n_tags)
-print np.mean(recall), np.std(recall) / sqrt(n_tags)
+print_out_metrics(tags_true_binary, tags_predicted, predictat)
 
 # <headingcell level=1>
 
@@ -188,7 +204,7 @@ print np.mean(recall), np.std(recall) / sqrt(n_tags)
 reload(pnmf)
 
 n_components = 100
-online_coder = pnmf.OnlinePoissonNMF(n_components=n_components, batch_size=500, n_pass=10, 
+online_coder = pnmf.OnlinePoissonNMF(n_components=n_components, batch_size=1000, n_pass=1, 
                                      random_state=98765, verbose=True)
 
 # <codecell>
@@ -258,14 +274,9 @@ tags_predicted = tags_predicted - div_factor * np.mean(tags_predicted, axis=0)
 # <codecell>
 
 predictat = 20
-tags_predicted_binary = construct_pred_mask(tags_predicted, predictat)
 tags_true_binary = (y_test > 0)
 
-# <codecell>
-
-prec, recall = per_tag_prec_recall(tags_predicted_binary, tags_true_binary)
-print np.mean(prec), np.std(prec) / sqrt(n_tags)
-print np.mean(recall), np.std(recall) / sqrt(n_tags)
+print_out_metrics(tags_true_binary, tags_predicted, predictat)
 
 # <headingcell level=1>
 
@@ -278,6 +289,7 @@ def ooc_fit(obj, train_tracks, K, n_feats):
     obj.scale = float(n_samples) / obj.batch_size
     obj._init_components(n_feats)
     obj.bound = list()
+
     for count in xrange(obj.n_pass):
         print 'Iteration %d: passing through the data...' % count
         indices = np.arange(n_samples)
@@ -294,13 +306,18 @@ def ooc_fit(obj, train_tracks, K, n_feats):
                 tdir = os.path.join('vq_hist', '/'.join(tid[2:5]))
                 vq = np.load(os.path.join(tdir, '%s_K%d.npy' % (tid, K))).ravel()
                 bot = np.load(os.path.join(tdir, '%s_BoT.npy' % tid))
-                bot[bot > 0] = 1                
+                bot[bot > 0] = 2               
                 mini_batch[s] = np.hstack((vq, bot))
             obj.partial_fit(mini_batch)
             obj.bound.append(obj._stoch_bound(mini_batch))
+            
             if not i % 50:
                 print '\t%d mini-batches finished.' % i
     return obj
+
+# <markdowncell>
+
+# Train online NMF from scratch
 
 # <codecell>
 
@@ -312,10 +329,47 @@ online_coder_full = pnmf.OnlinePoissonNMF(n_components=n_components, batch_size=
 
 # <codecell>
 
-K = 2048
-D = K + len(tags)
-
 online_coder_full = ooc_fit(online_coder_full, train_tracks, K, D)
+
+# <codecell>
+
+with open('metrics_K512.pickle', 'rb') as f:
+    metrics_dict = pickle.load(f)
+f_scores = metrics_dict['f_score']
+arocs = metrics_dict['aroc']
+aps = metrics_dict['ap']
+
+# <codecell>
+
+figure(figsize=(16, 3))
+subplot(131)
+plot(f_scores)
+xlabel('# batches', fontsize=15)
+ylabel('F-Score', fontsize=15)
+axhline(y=0.112, color='red')
+subplot(132)
+plot(arocs)
+xlabel('# batches', fontsize=15)
+ylabel('AROC', fontsize=15)
+axhline(y=0.646, color='red')
+subplot(133)
+plot(aps)
+axhline(y=0.092, color='red')
+xlabel('# batches', fontsize=15)
+ylabel('AP', fontsize=15)
+
+tight_layout()
+
+#savefig('metrics_K512.eps')
+
+# <markdowncell>
+
+# ...or load the existing model
+
+# <codecell>
+
+with open('online_NMF_K%d_N100_S1000.cPickle' % K, 'rb') as f:
+    online_coder_full = pickle.load(f)
 
 # <codecell>
 
@@ -325,6 +379,23 @@ pass
 # <codecell>
 
 np.mean(online_coder_full.bound[-100:])
+
+# <codecell>
+
+# randomly plot 9 "topics"
+indices = np.random.choice(n_components, size=9, replace=False)
+figure(figsize=(15, 5))
+for i in xrange(9):
+    subplot(3, 3, i+1)
+    topic = online_coder_full.Eb[indices[i]].copy()
+    # properly normalize the BoT dimensions for visualization purposes
+    topic[K:] /= topic[K:].max()
+    topic[K:] *= topic[:K].max()
+    bar(np.arange(D), topic)
+    axvline(x=K, color='red')
+    title('Component #%d' % indices[i])
+tight_layout()
+#savefig('stoc_dict.eps')
 
 # <codecell>
 
@@ -373,8 +444,6 @@ Et = tagger.transform(X_test)
 # <codecell>
 
 tags_predicted = Et.dot(online_coder_full.Eb[:, K:])
-n_samples, n_tags = tags_predicted.shape
-
 print tags_predicted.min(), tags_predicted.max()
 
 div_factor = 3
@@ -383,18 +452,9 @@ tags_predicted = tags_predicted - div_factor * np.mean(tags_predicted, axis=0)
 # <codecell>
 
 predictat = 20
-tags_predicted_binary = construct_pred_mask(tags_predicted, predictat)
 tags_true_binary = (y_test > 0)
 
-# <codecell>
-
-prec, recall = per_tag_prec_recall(tags_predicted_binary, tags_true_binary)
-print np.mean(prec), np.std(prec) / sqrt(n_tags)
-print np.mean(recall), np.std(recall) / sqrt(n_tags)
-
-# <codecell>
-
-import cPickle as pickle
+print_out_metrics(tags_true_binary, tags_predicted, predictat)
 
 # <codecell>
 

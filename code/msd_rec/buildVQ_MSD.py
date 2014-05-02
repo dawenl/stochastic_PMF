@@ -162,7 +162,7 @@ with open('Codebook_K%d_Hartigan.cPickle' % K, 'wb') as f:
 
 # <codecell>
 
-with open('Codebook_K%d_Hartigan.cPickle' % K, 'wb') as f:
+with open('Codebook_K%d_Hartigan.cPickle' % K, 'rb') as f:
     cluster = pickle.load(f)
 
 vq = VectorQuantizer.VectorQuantizer(clusterer=cluster)
