@@ -186,11 +186,12 @@ class OnlinePoissonNMF(BaseEstimator, TransformerMixin):
         self.Et, self.Elogt = _compute_expectations(self.gamma_t, self.rho_t)
         self.c = 1. / np.mean(self.Et)
 
-    def fit(self, X, n_samples=None):
-        temp, n_feats = X.shape
-        if n_samples is None:
-            n_samples = temp
-        self.scale = float(n_samples) / self.batch_size
+    def fit(self, X, D=None):
+        n_samples, n_feats = X.shape
+        if D is not None:
+            self.scale = float(D) / self.batch_size
+        else:
+            self.scale = float(n_samples) / self.batch_size
         self._init_components(n_feats)
         self.bound = list()
         for count in xrange(self.n_pass):
