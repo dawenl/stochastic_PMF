@@ -141,6 +141,17 @@ tags
 
 # <codecell>
 
+import json
+
+with open('stag_to_tag.json') as f:
+    stag_to_tag = json.load(f)
+
+# <codecell>
+
+stag_to_tag
+
+# <codecell>
+
 voc_to_num = dict((tag, i) for (i, tag) in enumerate(tags))
 
 # <codecell>

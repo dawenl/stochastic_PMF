@@ -107,7 +107,7 @@ pass
 
 # <codecell>
 
-K = 512
+K = 1024
 
 # <codecell>
 
@@ -182,6 +182,8 @@ Et = tagger.transform(X_test)
 
 # <codecell>
 
+Et /= Et.sum(axis=1, keepdims=True)
+
 tags_predicted = Et.dot(coder.Eb[:, K:])
 print tags_predicted.min(), tags_predicted.max()
 
@@ -209,7 +211,7 @@ online_coder = pnmf.OnlinePoissonNMF(n_components=n_components, batch_size=1000,
 
 # <codecell>
 
-online_coder.fit(X)
+online_coder.fit(X, D=len(train_tracks))
 
 # <codecell>
 
@@ -261,6 +263,8 @@ tagger.set_components(online_coder.gamma_b[:, :K], online_coder.rho_b[:, :K])
 Et = tagger.transform(X_test)
 
 # <codecell>
+
+Et /= Et.sum(axis=1, keepdims=True)
 
 tags_predicted = Et.dot(online_coder.Eb[:, K:])
 n_samples, n_tags = tags_predicted.shape
@@ -323,7 +327,8 @@ def ooc_fit(obj, train_tracks, K, n_feats):
 reload(pnmf)
 
 n_components = 100
-online_coder_full = pnmf.OnlinePoissonNMF(n_components=n_components, batch_size=1000, n_pass=1, 
+batch_size = 1000
+online_coder_full = pnmf.OnlinePoissonNMF(n_components=n_components, batch_size=batch_size, n_pass=1, 
                                           random_state=98765, verbose=True)
 
 # <codecell>
@@ -332,7 +337,7 @@ online_coder_full = ooc_fit(online_coder_full, train_tracks, K, D)
 
 # <codecell>
 
-with open('metrics_K512.pickle', 'rb') as f:
+with open('backup/metrics_K512.pickle', 'rb') as f:
     metrics_dict = pickle.load(f)
 f_scores = metrics_dict['f_score']
 arocs = metrics_dict['aroc']
@@ -345,17 +350,17 @@ subplot(131)
 plot(f_scores)
 xlabel('# batches', fontsize=15)
 ylabel('F-Score', fontsize=15)
-axhline(y=0.112, color='red')
+axhline(y=0.109, color='red')
 subplot(132)
 plot(arocs)
 xlabel('# batches', fontsize=15)
 ylabel('AROC', fontsize=15)
-axhline(y=0.646, color='red')
+axhline(y=0.645, color='red')
 subplot(133)
 plot(aps)
-axhline(y=0.092, color='red')
+axhline(y=0.098, color='red')
 xlabel('# batches', fontsize=15)
-ylabel('AP', fontsize=15)
+ylabel('MAP', fontsize=15)
 
 tight_layout()
 
@@ -367,7 +372,7 @@ tight_layout()
 
 # <codecell>
 
-with open('online_NMF_K%d_N100_S1000.cPickle' % K, 'rb') as f:
+with open('online_NMF_K%d_N100_S%d.cPickle' % (K, batch_size), 'rb') as f:
     online_coder_full = pickle.load(f)
 
 # <codecell>
@@ -378,6 +383,34 @@ pass
 # <codecell>
 
 np.mean(online_coder_full.bound[-100:])
+
+# <codecell>
+
+nd_tags = np.array(tags)
+
+# <codecell>
+
+import json
+with open('stag_to_tag.json', 'rb') as f:
+    stag_to_tag = json.load(f)
+
+# <codecell>
+
+print_topK(36, 7)
+
+# <codecell>
+
+print_topK(21, 7)
+
+# <codecell>
+
+
+# <codecell>
+
+def print_topK(idx, topk):
+    top = np.argsort(-online_coder_full.Eb[idx, K:])[:topk]
+    for (tag, score) in map(lambda x: (stag_to_tag[nd_tags[x]], online_coder_full.Eb[idx, K+x]), top):
+        print '%s\t%.3f' % (tag[0], score)
 
 # <codecell>
 
@@ -442,6 +475,7 @@ Et = tagger.transform(X_test)
 
 # <codecell>
 
+Et /= Et.sum(axis=1, keepdims=True)
 tags_predicted = Et.dot(online_coder_full.Eb[:, K:])
 print tags_predicted.min(), tags_predicted.max()
 
@@ -454,6 +488,18 @@ predictat = 20
 tags_true_binary = (y_test > 0)
 
 print_out_metrics(tags_true_binary, tags_predicted, predictat)
+
+# <codecell>
+
+for (i, tid) in enumerate(test_tracks_selected):
+    out = !grep "$tid" "$MSD_ADD"/unique_tracks.txt
+    print i, out[0].strip().split('<SEP>')[2:4] 
+
+# <codecell>
+
+for i in np.argsort(-tagger.Et[167, :])[:3]:
+    print_topK(i, 5)
+    print 
 
 # <codecell>
 
