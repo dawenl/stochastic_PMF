@@ -33,7 +33,7 @@ class PoissonNMF(BaseEstimator, TransformerMixin):
         self.b = float(kwargs.get('b', 0.1))
 
     def _init_components(self, n_feats):
-       # variational parameters for beta
+        # variational parameters for beta
         self.gamma_b = self.smoothness \
             * np.random.gamma(self.smoothness, 1. / self.smoothness,
                               size=(self.n_components, n_feats))
@@ -96,14 +96,16 @@ class PoissonNMF(BaseEstimator, TransformerMixin):
 
     def _update_theta(self, X):
         ratio = X / self._xexplog()
-        self.gamma_t = self.a + np.exp(self.Elogt) * np.dot(ratio, np.exp(self.Elogb).T)
+        self.gamma_t = self.a + np.exp(self.Elogt) * np.dot(
+            ratio, np.exp(self.Elogb).T)
         self.rho_t = self.a * self.c + np.sum(self.Eb, axis=1)
         self.Et, self.Elogt = _compute_expectations(self.gamma_t, self.rho_t)
         self.c = 1. / np.mean(self.Et)
 
     def _update_beta(self, X):
         ratio = X / self._xexplog()
-        self.gamma_b = self.b + np.exp(self.Elogb) * np.dot(np.exp(self.Elogt).T, ratio)
+        self.gamma_b = self.b + np.exp(self.Elogb) * np.dot(
+            np.exp(self.Elogt).T, ratio)
         self.rho_b = self.b + np.sum(self.Et, axis=0, keepdims=True).T
         self.Eb, self.Elogb = _compute_expectations(self.gamma_b, self.rho_b)
 
@@ -125,6 +127,7 @@ class PoissonNMF(BaseEstimator, TransformerMixin):
                         (special.gammaln(self.gamma_b) -
                          self.gamma_b * np.log(self.rho_b)))
         return bound
+
 
 def _compute_expectations(alpha, beta):
     '''
@@ -162,7 +165,7 @@ class OnlinePoissonNMF(BaseEstimator, TransformerMixin):
         self.kappa = float(kwargs.get('kappa', 0.6))
 
     def _init_components(self, n_feats):
-       # variational parameters for beta
+        # variational parameters for beta
         self.gamma_b = self.smoothness \
             * np.random.gamma(self.smoothness, 1. / self.smoothness,
                               size=(self.n_components, n_feats))
@@ -216,8 +219,11 @@ class OnlinePoissonNMF(BaseEstimator, TransformerMixin):
         self.transform(X)
         # take a (natural) gradient step
         ratio = X / self._xexplog()
-        self.gamma_b = (1 - self.rho) * self.gamma_b + self.rho * (self.b + self.scale * np.exp(self.Elogb) * np.dot(np.exp(self.Elogt).T, ratio))
-        self.rho_b = (1 - self.rho) * self.rho_b + self.rho * (self.b + self.scale * np.sum(self.Et, axis=0, keepdims=True).T)
+        self.gamma_b = (1 - self.rho) * self.gamma_b + self.rho * \
+            (self.b + self.scale * np.exp(self.Elogb) *
+             np.dot(np.exp(self.Elogt).T, ratio))
+        self.rho_b = (1 - self.rho) * self.rho_b + self.rho * \
+            (self.b + self.scale * np.sum(self.Et, axis=0, keepdims=True).T)
         self.Eb, self.Elogb = _compute_expectations(self.gamma_b, self.rho_b)
 
     def transform(self, X, attr=None):
@@ -247,14 +253,16 @@ class OnlinePoissonNMF(BaseEstimator, TransformerMixin):
 
     def _update_theta(self, X):
         ratio = X / self._xexplog()
-        self.gamma_t = self.a + np.exp(self.Elogt) * np.dot(ratio, np.exp(self.Elogb).T)
+        self.gamma_t = self.a + np.exp(self.Elogt) * np.dot(
+            ratio, np.exp(self.Elogb).T)
         self.rho_t = self.a * self.c + np.sum(self.Eb, axis=1)
         self.Et, self.Elogt = _compute_expectations(self.gamma_t, self.rho_t)
         self.c = 1. / np.mean(self.Et)
 
     def _update_beta(self, X):
         ratio = X / self._xexplog()
-        self.gamma_b = self.b + np.exp(self.Elogb) * np.dot(np.exp(self.Elogt).T, ratio)
+        self.gamma_b = self.b + np.exp(self.Elogb) * np.dot(
+            np.exp(self.Elogt).T, ratio)
         self.rho_b = self.b + np.sum(self.Et, axis=0, keepdims=True).T
         self.Eb, self.Elogb = _compute_expectations(self.gamma_b, self.rho_b)
 
@@ -275,12 +283,11 @@ class OnlinePoissonNMF(BaseEstimator, TransformerMixin):
         return bound
 
     def _stoch_bound(self, X):
-        bound = self.scale * np.sum(X * np.log(self._xexplog())
-                                    - self.Et.dot(self.Eb))
-        bound += self.scale * _gamma_term(self.a, self.a * self.c,
-                                          self.gamma_t, self.rho_t,
-                                          self.Et, self.Elogt)
-        bound += self.scale * self.n_components * X.shape[0] * self.a * np.log(self.c)
+        bound = np.sum(X * np.log(self._xexplog()) - self.Et.dot(self.Eb))
+        bound += _gamma_term(self.a, self.a * self.c, self.gamma_t, self.rho_t,
+                             self.Et, self.Elogt)
+        bound += self.n_components * X.shape[0] * self.a * np.log(self.c)
+        bound *= self.scale
         bound += _gamma_term(self.b, self.b, self.gamma_b, self.rho_b,
                              self.Eb, self.Elogb)
         return bound
