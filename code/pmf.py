@@ -345,8 +345,8 @@ class OnlinePoissonMF(PoissonMF):
         Parameters
         ----------
         iter : int
-            The current iteration, used to compute a Robbins-Monro type learning
-            rate
+            The current iteration, used to compute a Robbins-Monro type
+            learning rate
         rho : float
             Directly specify the learning rate. Will override the one computed
             from the current iteration.
