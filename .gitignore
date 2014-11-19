@@ -44,6 +44,8 @@ nosetests.xml
 output_*
 *.cPickle
 *.npy
+*.mat
+code/vq_hist/*
 
 # Notes
 *.aux
