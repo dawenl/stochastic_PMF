@@ -2,7 +2,7 @@ Poisson matrix factorization and automatic music tagging
 ======
 
 Source code for the paper:
-[Codebook-based Scalable Music Tagging with Poisson Matrix Factorization](http://www.ee.columbia.edu/~dliang/publications/LiangPE14-codebook.pdf) by Dawen Liang, John Paisley and Dan Ellis, in ISMIR 2014. 
+[Codebook-based Scalable Music Tagging with Poisson Matrix Factorization](http://dawenl.github.io/publications/LiangPE14-codebook.pdf) by Dawen Liang, John Paisley and Dan Ellis, in ISMIR 2014. 
 
 Dawen Liang
 dliang@ee.columbia.edu
